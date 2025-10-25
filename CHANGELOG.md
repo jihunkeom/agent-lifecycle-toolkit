@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v0.4.1 (2025-10-25)
+
+### Documentation
+
+- Add arxiv links and modify index doc to be in line with README
+  ([#31](https://github.com/AgentToolkit/agent-lifecycle-toolkit/pull/31),
+  [`fd503c7`](https://github.com/AgentToolkit/agent-lifecycle-toolkit/commit/fd503c7a5bfe2f8bc029fb01e2839a30f285d9ca))
+
+- Add link to github repo ([#33](https://github.com/AgentToolkit/agent-lifecycle-toolkit/pull/33),
+  [`51cea2d`](https://github.com/AgentToolkit/agent-lifecycle-toolkit/commit/51cea2d9401984895a18b8899d405eeb93ff6994))
+
+- Fix broken links ([#32](https://github.com/AgentToolkit/agent-lifecycle-toolkit/pull/32),
+  [`25f8150`](https://github.com/AgentToolkit/agent-lifecycle-toolkit/commit/25f81504f8eb416b5cfc54b48fe39801b2253879))
+
+- Make the "Star us" text bigger and clickable.
+  ([#37](https://github.com/AgentToolkit/agent-lifecycle-toolkit/pull/37),
+  [`b55376d`](https://github.com/AgentToolkit/agent-lifecycle-toolkit/commit/b55376d7dddf65e23c2d5b10447b12f434099679))
+
+- Policy guard example notebook
+  ([#26](https://github.com/AgentToolkit/agent-lifecycle-toolkit/pull/26),
+  [`e28bdc6`](https://github.com/AgentToolkit/agent-lifecycle-toolkit/commit/e28bdc672a9f564fe91e8f233b038137846cf77c))
+
+- Typeset component problems differently in the readme.
+  ([#28](https://github.com/AgentToolkit/agent-lifecycle-toolkit/pull/28),
+  [`ac831f1`](https://github.com/AgentToolkit/agent-lifecycle-toolkit/commit/ac831f1990e648cdf111fe723e54e8e40cc4fab3))
+
+- Update documentation design and branding
+  ([#36](https://github.com/AgentToolkit/agent-lifecycle-toolkit/pull/36),
+  [`a99494a`](https://github.com/AgentToolkit/agent-lifecycle-toolkit/commit/a99494aaf7ce327df1f95598bf757c3c12ab284b))
+
+- Update mkdocs config ([#30](https://github.com/AgentToolkit/agent-lifecycle-toolkit/pull/30),
+  [`a8fa7e9`](https://github.com/AgentToolkit/agent-lifecycle-toolkit/commit/a8fa7e9b32af69a5f4847c2f8601540ff2b5cf74))
+
+
 ## v0.4.0 (2025-10-21)
 
 ### Documentation
