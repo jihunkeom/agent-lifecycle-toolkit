@@ -1,168 +1,121 @@
 # ToolGuards for Enforcing Agentic Policy Adherence
-An agent lifecycle solution for enforcing business policy adherence in agentic workflows. Enabling this component has demonstrated up to a **20‑point improvement** in end‑to‑end agent accuracy when invoking tools.
+An agent lifecycle solution for enforcing business policy adherence in agentic workflows. Enabling this component has demonstrated up to a **20‑point improvement** in end‑to‑end agent accuracy when invoking tools. This work is described in [EMNLP 2025 Towards Enforcing Company Policy Adherence in Agentic Workflows](https://arxiv.org/pdf/2507.16459), and is publiched in [this GitHub library](https://github.com/AgentToolkit/toolguard).
 
 ## Table of Contents
 - [Overview](#overview)
-- [When to Use This Component](#when-it-is-recommended-to-use-this-component)
-- [LLM Configuration Requirements](#llm-configuration-requirements)
-- [Quick Start](#quick-start)
-- [Parameters](#parameters)
-  - [Constructor Parameters](#constructor-parameters)
-  - [Build Phase Input Format](#build-phase-input-format)
-  - [Run Phase Input Format](#run-phase-input-format)
-  - [Run Phase Output Format](#run-phase-output-format)
-
+- [ToolGuardSpecComponent](#ToolGuardSpecComponent)
+  - [Configuarion](#component-configuarion)
+  - [Inputs and Outputs](#input-and-output)
+  - [Usage example](#usage-example)
+- [ToolGuardCodeComponent](#ToolGuardCodeComponent)
+  - [Configuarion](#component-configuarion-1)
+  - [Inputs and Outputs](#input-and-output-1)
+  - [Usage example](#usage-example-1)
 
 
 ## Overview
 
 Business policies (or guidelines) are normally detailed in company documents, and have traditionally been hard-coded into automatic assistant platforms. Contemporary agentic approaches take the "best-effort" strategy, where the policies are appended to the agent's system prompt, an inherently non-deterministic approach, that does not scale effectively. Here we propose a deterministic, predictable and interpretable two-phase solution for agentic policy adherence at the tool-level: guards are executed prior to function invocation and raise alerts in case a tool-related policy deem violated.
-
-### Key Components
-
-The solution enforces policy adherence through a two-phase process:
-
-(1) **Buildtime**: an offline two-step pipeline that automatically maps policy fragments to the relevant tools and generates policy validation code - ToolGuards.
-
-(2) **Runtime**: ToolGuards are deployed within the agent's ReAct flow, and are executed after "reason" and just before "act" (agent's tool invocation). If a planned action violates a policy, the agent is prompted to self-reflect and revise its plan before proceeding. Ultimately, the deployed ToolGuards will prevent the agent from taking an action violating a policy.
-
-<!-- ![two-phase-solution](buildtime-runtime.png) -->
-
-
-## When it is Recommended to Use This Component
 This component enforces **pre‑tool activation policy constraints**, ensuring that agent decisions comply with business rules **before** modifying system state. This prevents policy violations such as unauthorized tool calls or unsafe parameter values.
 
-## LLM Configuration Requirements
-The **build phase** uses **two LLMs**:
+## ToolGuardSpecComponent
+This component gets a set of tools and a policy document and generated multiple ToolGuard specifications, known as `ToolGuardSpec`s. Each specification is attached to a tool, and it declares a precondition that must apply before invoking the tool. The specification has a `name`, `description`, list of `refernces` to the original policy document, a set of declerative `compliance_examples`, describing test cases that the toolGuard should allow the tool invocation, and `violation_examples`, where the toolGuard should raise an exception.
 
-### 1. Reasoning LLM (Build Step 1)
-Used to interpret, restructure, and classify policy text.
+This componenet supports only a `build` phase. The generate specifications are returned as output, and are also saved to a specified file system directory.
+The specifications are aimed to be used as input into our next component - the `ToolGuardCodeComponent` described below. 
 
-This model can be any LLM registered through:
+The two components are not concatenated by design. As the geneartion involves a non-deterministic language model, the results need to be reviewed by a human. Hence, the output specification files should be reviewed and optionaly edited. For example, removing a wrong compliance example.
+
+### Component Configuarion
+This component expects an LLM client configuarion. Here is a concerete example using WatsonX SDK:
 ```python
-from altk.core.llm import get_llm  # def get_llm(name: str) -> Type["LLMClient"]
-
-OPENAILiteLLMClientOutputVal = get_llm("litellm.output_val")
-
-```
-#### Azure example for gpt-4o:
-
-Environment variables:
-```bash
-export AZURE_OPENAI_API_KEY="<your key>"
-export AZURE_API_BASE="https://your.azure.endpoint"
-export AZURE_API_VERSION="2024-08-01-preview"
-```
-code:
-```python
-from altk.core.llm import get_llm  # def get_llm(name: str) -> Type["LLMClient"]
-
-OPENAILiteLLMClientOutputVal = get_llm("litellm.output_val")
-validating_llm_client = OPENAILiteLLMClientOutputVal(
-    model_name="gpt-4o-2024-08-06",
-    custom_llm_provider="azure",
-)
-
-```
-
-### 2. Code Generation LLM (Build Step 2)
-Used only in the code generation phase to produce Python enforcement logic.
-Backed by Mellea, which requires parameters aligning to:
-```python
-mellea.MelleaSession.start_session(
-    backend_name=...,
-    model_id=...,
-    backend_kwargs=...    # any additional arguments
+from altk.core.llm.providers.ibm_watsonx_ai.ibm_watsonx_ai import WatsonxLLMClient
+llm_client = WatsonxLLMClient(
+    model_name="meta-llama/llama-4-maverick-17b-128e-instruct-fp8",
+    api_key=os.getenv("WX_API_KEY"),
+    project_id = os.getenv("WX_PROJECT_ID"),
+    url=os.getenv("WX_URL"),
 )
 ```
 
-These map directly to environment variables:
 
-| Environment Variable           | Mellea Parameter | Description                                                        |
-| ------------------------------ | ---------------- | ------------------------------------------------------------------ |
-| `TOOLGUARD_GENPY_BACKEND_NAME` | `backend_name`   | Which backend to use (e.g., `openai`, `anthropic`, `vertex`, etc.) |
-| `TOOLGUARD_GENPY_MODEL_ID`     | `model_id`       | Model name / deployment id                                         |
-| `TOOLGUARD_GENPY_ARGS`         | `backend_kwargs` | JSON dict of any additional connection/LLM parameters              |
+### Input and Output
+The component build input is a `ToolGuardSpecBuildInput` object containing the following fields:
+  * `policy_text: str`: Text of the policy document
+  * `tools: List[Callable] | List[BaseTool] | str`: List of available tools. Either as Python functions, methods, Langgraph Tools, or a path to an Open API specification file.
+  * `out_dir: str`: A directory in the local file system where the specification objects will be saved. 
 
-Example (Claude-4 Sonnet through OpenAI-compatible endpoint):
-```bash
-export TOOLGUARD_GENPY_BACKEND_NAME="openai"
-export TOOLGUARD_GENPY_MODEL_ID="GCP/claude-4-sonnet"
-export TOOLGUARD_GENPY_ARGS='{"base_url":"https://your-litellm-endpoint","api_key":"<your key>"}'
+The component build output is a list of `ToolGuardSpec`, as described above.
+
+### Usage example
+see [simple calculator test](../../../tests/pre_tool/toolguard/test_toolguard_specs.py)
+
+
+## ToolGuardCodeComponent
+
+This components enfoorces policy adherence through a two-phase process:
+
+(1) **Buildtime**: Given a set of `ToolGuardSpec`s, generates policy validation code - `ToolGuard`s.
+Similar to ToolGuard Specifications, generated `ToolGuards` are a good start, but they may contain errors. Hence, they should be also reviewed by a human.
+
+(2) **Runtime**: ToolGuards are deployed within the agent's flow, and are triggered before agent's tool invocation. They can be deployed into the agent loop, or in an MCP Gateway. 
+The ToolGuards checks if a planned action complies with the policy. If it violates, the agent is prompted to self-reflect and revise its plan before proceeding. 
+
+
+### Component Configuarion
+
+This component expects an LLM client configuarion. 
+Here is an example using a Watsonx LLM client:
 ```
-
-## Quick Start
-See runnable example:
-```
-pre-tool-guard-toolkit/examples/calculator_example
-```
-
-```python
-import asyncio
-from altk.pre_tool.toolguard.core import (
-    ToolGuardBuildInput, ToolGuardBuildInputMetaData,
-    ToolGuardRunInput, ToolGuardRunInputMetaData,
+from altk.core.llm.providers.ibm_watsonx_ai.ibm_watsonx_ai import WatsonxLLMClient
+llm = WatsonxLLMClient(
+    model_name="meta-llama/llama-4-maverick-17b-128e-instruct-fp8",
+    api_key=os.getenv("WX_API_KEY"),
+    project_id = os.getenv("WX_PROJECT_ID"),
+    url=os.getenv("WX_URL"),
 )
-from altk.pre_tool.toolguard.pre_tool_guard import PreToolGuardComponent
-
-class ToolGuardExample:
-    def __init__(self, tools, workdir, policy_text, validating_llm_client, short=True):
-        self.middleware = PreToolGuardComponent(tools=tools, workdir=workdir, app_name="calculator")
-        build_input = ToolGuardBuildInput(metadata=ToolGuardBuildInputMetaData(
-            policy_text=policy_text,
-            short1=short,
-            validating_llm_client=validating_llm_client,
-        ))
-        asyncio.run(self.middleware._build(build_input))
-
-    def run_example(self, tool_name, tool_params):
-        run_input = ToolGuardRunInput(
-            metadata=ToolGuardRunInputMetaData(tool_name=tool_name, tool_parms=tool_params),
-        )
-        return self.middleware._run(run_input)
+config = ToolGuardCodeComponentConfig(llm_client=llm)
+toolguard_code_component = ToolGuardCodeComponent(config)
 ```
 
 
-## Parameters
+### Input and Output
+The Component has two phases:
+#### Build phase
+An agent owner should use this API to generate ToolGuards - Python function that enforce the given business policy.
+The input of the build phase is a `ToolGuardCodeBuildInput` object, containing:
+  * `tools: List[Callable] | List[BaseTool] | str`: List of available tools. Either as Python functions, methods, Langgraph Tools, or a path to an Open API specification file.
+  * `toolguard_specs: List[ToolGuardSpec]`: List of specifications, optionaly generated by `ToolGuardSpecComponent` component and reviewed.
+  * `out_dir: str | Path`: A directory in the local file system where the ToolGuard objects will be saved. 
 
-### Constructor Parameters
-```python
-PreToolGuardComponent(tools, workdir)
-```
+The output of the build phase is a `ToolGuardsCodeGenerationResult` object with:
+  * `out_dir: Path`: Path to the file system where the results were saved. It is the same as the `input.out_dir`.
+  * `domain: RuntimeDomain`: A complex object descibing the generated APIs. For example, refernces to Python file names and class names.
+  * `tools: Dict[str, ToolGuardCodeResult]`: A Dictionary of the ToolGuardsResults, by the tool names. 
+    * Each `ToolGuardCodeResult` details the name of guard Python file name and the guard function name. It also reference to the generated unit test files.
 
-| Parameter | Type             | Description |
-|----------|------------------|-------------|
-| `tools`   | `list[Callable]` | List of functions or LangChain tools to safeguard.
-| `workdir` | `str` or `Path`  | Writable working directory for storing build artifacts.
+#### Runtime phase
+A running agent should use the runtime API to check if a tool call complies with the given policy.
+The input of the runtime phase is a `ToolGuardCodeRunInput` object:
+  * `generated_guard_dir: str | Path`: Path in the local file system where the generated guard Python code (The code that was generated during the build time, described above) is located.
+  * `tool_name: str`: The name of the tool that the agent is about to call
+  * `tool_args: Dict[str, Any]`: A dictionary of the toolcall arguments, by the argument name.
+  * `tool_invoker: IToolInvoker`: A proxy object that enables the guard to call other read-only tools. This is needed when the policy enforcement logic involves getting data from another tool. For example, before booking a flight, you need to check the flight status by calling the "get_flight_status" API.
+  The `IToolInvoker` interface contains a single method: 
+    ```
+    def invoke(self, toolname: str, arguments: Dict[str, Any], return_type: Type[T]) -> T
+    ```
 
-### Build Phase Input Format
-```python
-ToolGuardBuildInput(
-    metadata=ToolGuardBuildInputMetaData(
-        policy_text="<Markdown or HTML policy>",
-        short1=True,
-        validating_llm_client=<LLMClient>
-    )
-)
-```
+    ToolGuard library currently ships with three predefined ToolInvokers:
+     * `toolguard.runtime.ToolFunctionsInvoker(funcs: List[Callable])` where the tools are defined as plain global Python functions.
+     * `toolguard.runtime.ToolMethodsInvoker(obj: object)` where the tools are defined as methods in a given Python object.
+     * `toolguard.runtime.LangchainToolInvoker(tools: List[BaseTool])` where the tools are a list of langchain tools.
+     
 
-### Run Phase Input Format
-```python
-ToolGuardRunInput(
-    metadata=ToolGuardRunInputMetaData(
-        tool_name="divide_tool",
-        tool_parms={"g": 3, "h": 4},
-    ),
-    messages=[{"role": "user", "content": "Calculate 3/4"}]
-)
-```
+The outpput of the runtime phase is a `ToolGuardCodeRunOutput` object with an optional `violation` field.
+  * `violation: PolicyViolation | None`: Polpulated only if a violation was identified. If the toolcall complies with the policy, the violation is None. 
+    * `violation_level: "info" | "warn" | "error"`: Severity level of a safety violation.
+    * `user_message: str | None`: A meaningful error message to the user (this message can be also passed to the agent reasoning phase to find an alternative next action).
 
-### Run Phase Output Format
-```python
-ToolGuardRunOutput(output=ToolGuardRunOutputMetaData(error_message=False))
-```
-`error_message` is either `False` (valid) or a descriptive violation message.
-
-## License
-Apache 2.0 - see LICENSE file for details.
-
+### Usage example
+see [simple calculator test](../../../tests/pre_tool/toolguard/test_toolguard_code.py)
